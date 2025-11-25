@@ -19,13 +19,31 @@ from sqlalchemy.sql import func
 from werkzeug.utils import secure_filename
 
 
+def _build_database_uri(app_root: str) -> str:
+    env_url = os.environ.get("DATABASE_URL")
+    if env_url:
+        return env_url
+
+    mysql_host = os.environ.get("MYSQL_HOST")
+    mysql_db = os.environ.get("MYSQL_DATABASE")
+    mysql_user = os.environ.get("MYSQL_USER")
+    mysql_password = os.environ.get("MYSQL_PASSWORD")
+    mysql_port = os.environ.get("MYSQL_PORT", "3306")
+
+    if mysql_host and mysql_db and mysql_user:
+        password = f":{mysql_password}" if mysql_password else ""
+        return (
+            f"mysql+pymysql://{mysql_user}{password}@{mysql_host}:{mysql_port}/{mysql_db}"
+        )
+
+    return f"sqlite:///{os.path.join(app_root, 'tickets.db')}"
+
+
 def create_app(test_config: Optional[dict] = None) -> Flask:
     app = Flask(__name__)
     app.config.update(
         SECRET_KEY=os.environ.get("FLASK_SECRET_KEY", "dev-key"),
-        SQLALCHEMY_DATABASE_URI=os.environ.get(
-            "DATABASE_URL", f"sqlite:///{os.path.join(app.root_path, 'tickets.db')}"
-        ),
+        SQLALCHEMY_DATABASE_URI=_build_database_uri(app.root_path),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
     )
 
