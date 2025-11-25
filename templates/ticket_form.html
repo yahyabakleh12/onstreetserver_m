@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+  <div class="col-lg-10 col-xl-8">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h1 class="h4 mb-0">{{ 'Edit ' + ticket_label if ticket else 'Create ' + ticket_label }} Ticket</h1>
+      <a class="btn btn-outline-secondary" href="{{ url_for('list_tickets', ticket_type=ticket_type) }}">Back</a>
+    </div>
+
+    <form method="post" class="card card-body shadow-sm">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Camera ID</label>
+          <input type="number" class="form-control" name="camera_id" value="{{ ticket.camera_id if ticket else '' }}" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Zone Name</label>
+          <input type="text" class="form-control" name="zone_name" value="{{ ticket.zone_name if ticket else '' }}" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Zone Region</label>
+          <input type="text" class="form-control" name="zone_region" value="{{ ticket.zone_region if ticket else '' }}" />
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label">Camera IP</label>
+          <input type="text" class="form-control" name="camera_ip" value="{{ ticket.camera_ip if ticket else '' }}" />
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Spot Number</label>
+          <input type="number" class="form-control" name="spot_number" value="{{ ticket.spot_number if ticket else '' }}" />
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Status</label>
+          <input type="text" class="form-control" name="status" value="{{ ticket.status if ticket else '' }}" />
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Plate Number</label>
+          <input type="text" class="form-control" name="plate_number" value="{{ ticket.plate_number if ticket else '' }}" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Plate Code</label>
+          <input type="text" class="form-control" name="plate_code" value="{{ ticket.plate_code if ticket else '' }}" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Plate City</label>
+          <input type="text" class="form-control" name="plate_city" value="{{ ticket.plate_city if ticket else '' }}" />
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Crop Image Path</label>
+          <input type="text" class="form-control" name="crop_image_path" value="{{ ticket.crop_image_path if ticket else '' }}" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Entry Image Path</label>
+          <input type="text" class="form-control" name="entry_image_path" value="{{ ticket.entry_image_path if ticket else '' }}" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Exit Image Path</label>
+          <input type="text" class="form-control" name="exit_image_path" value="{{ ticket.exit_image_path if ticket else '' }}" />
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Confidence</label>
+          <input type="number" class="form-control" name="confidence" value="{{ ticket.confidence if ticket else '' }}" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Entry Time (ISO 8601)</label>
+          <input type="text" class="form-control" name="entry_time" placeholder="2024-01-01T12:00:00" value="{{ ticket.entry_time if ticket else '' }}" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Exit Time (ISO 8601)</label>
+          <input type="text" class="form-control" name="exit_time" placeholder="2024-01-01T14:00:00" value="{{ ticket.exit_time if ticket else '' }}" />
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Parkonic Trip ID</label>
+          <input type="number" class="form-control" name="parkonic_trip_id" value="{{ ticket.parkonic_trip_id if ticket else '' }}" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Process Time In (ISO 8601)</label>
+          <input type="text" class="form-control" name="process_time_in" value="{{ ticket.process_time_in if ticket else '' }}" />
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Process Time Out (ISO 8601)</label>
+          <input type="text" class="form-control" name="process_time_out" value="{{ ticket.process_time_out if ticket else '' }}" />
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Exit Clip Path</label>
+          <input type="text" class="form-control" name="exit_clip_path" value="{{ ticket.exit_clip_path if ticket else '' }}" />
+        </div>
+        <div class="col-12">
+          <label class="form-label">Image Base64</label>
+          <textarea class="form-control" name="image_base64" rows="3" placeholder="Paste base64 image content">{{ ticket.image_base64 if ticket else '' }}</textarea>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-4">
+        <a class="btn btn-outline-secondary" href="{{ url_for('list_tickets', ticket_type=ticket_type) }}">Cancel</a>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
