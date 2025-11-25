@@ -8,7 +8,7 @@
       <a class="btn btn-outline-secondary" href="{{ url_for('list_tickets', ticket_type=ticket_type) }}">Back</a>
     </div>
 
-    <form method="post" class="card card-body shadow-sm">
+    <form method="post" class="card card-body shadow-sm" enctype="multipart/form-data">
       <div class="row g-3">
         <div class="col-md-4">
           <label class="form-label">Camera ID</label>
@@ -50,16 +50,25 @@
         </div>
 
         <div class="col-md-4">
-          <label class="form-label">Crop Image Path</label>
-          <input type="text" class="form-control" name="crop_image_path" value="{{ ticket.crop_image_path if ticket else '' }}" />
+          <label class="form-label">Crop Image</label>
+          <input type="file" class="form-control" name="crop_image" accept="image/*" />
+          {% if ticket and ticket.crop_image_path %}
+          <div class="form-text text-truncate">{{ ticket.crop_image_path }}</div>
+          {% endif %}
         </div>
         <div class="col-md-4">
-          <label class="form-label">Entry Image Path</label>
-          <input type="text" class="form-control" name="entry_image_path" value="{{ ticket.entry_image_path if ticket else '' }}" />
+          <label class="form-label">Entry Image</label>
+          <input type="file" class="form-control" name="entry_image" accept="image/*" />
+          {% if ticket and ticket.entry_image_path %}
+          <div class="form-text text-truncate">{{ ticket.entry_image_path }}</div>
+          {% endif %}
         </div>
         <div class="col-md-4">
-          <label class="form-label">Exit Image Path</label>
-          <input type="text" class="form-control" name="exit_image_path" value="{{ ticket.exit_image_path if ticket else '' }}" />
+          <label class="form-label">Exit Image</label>
+          <input type="file" class="form-control" name="exit_image" accept="image/*" />
+          {% if ticket and ticket.exit_image_path %}
+          <div class="form-text text-truncate">{{ ticket.exit_image_path }}</div>
+          {% endif %}
         </div>
 
         <div class="col-md-4">

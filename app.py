@@ -16,6 +16,7 @@ from flask import (
 )
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.sql import func
+from werkzeug.utils import secure_filename
 
 
 def create_app(test_config: Optional[dict] = None) -> Flask:
@@ -141,6 +142,7 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
                 entry_time=datetime.utcnow(),
                 status="pending",
                 entry_image_path="/tmp/entry.jpg",
+                crop_image_path="/tmp/crop.jpg",
             )
             db.session.add(sample_omc_ticket)
 
@@ -149,9 +151,102 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
     with app.app_context():
         create_tables()
 
+    @app.context_processor
+    def register_template_utils():
+        def image_url(path: Optional[str]):
+            if not path:
+                return None
+            if path.startswith("http://") or path.startswith("https://"):
+                return path
+            return url_for("static", filename=path.lstrip("/"))
+
+        return {"image_url": image_url}
+
     @app.route("/")
     def home() -> str:
         return redirect(url_for("list_tickets", ticket_type="ocr"))
+
+    def _extract_ticket_data(payload: dict) -> dict:
+        return {
+            "camera_id": _to_int(payload.get("camera_id")),
+            "zone_name": payload.get("zone_name"),
+            "camera_ip": payload.get("camera_ip"),
+            "zone_region": payload.get("zone_region"),
+            "spot_number": _to_int(payload.get("spot_number")),
+            "plate_number": payload.get("plate_number"),
+            "plate_code": payload.get("plate_code"),
+            "plate_city": payload.get("plate_city"),
+            "confidence": _to_int(payload.get("confidence")),
+            "entry_time": _parse_datetime(payload.get("entry_time")),
+            "exit_time": _parse_datetime(payload.get("exit_time")),
+            "status": payload.get("status"),
+            "parkonic_trip_id": _to_int(payload.get("parkonic_trip_id")),
+            "process_time_in": _parse_datetime(payload.get("process_time_in")),
+            "process_time_out": _parse_datetime(payload.get("process_time_out")),
+            "image_base64": payload.get("image_base64"),
+            "crop_image_path": payload.get("crop_image_path"),
+            "entry_image_path": payload.get("entry_image_path"),
+            "exit_image_path": payload.get("exit_image_path"),
+            "exit_clip_path": payload.get("exit_clip_path"),
+        }
+
+    def _save_uploaded_image(upload, ticket_type: str, category: str) -> Optional[str]:
+        if not upload or not upload.filename:
+            return None
+
+        upload_dir = os.path.join(
+            app.root_path, "static", "uploads", ticket_type.lower(), category
+        )
+        os.makedirs(upload_dir, exist_ok=True)
+
+        filename = secure_filename(upload.filename) or f"{category}.jpg"
+        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+        final_name = f"{timestamp}_{filename}"
+        save_path = os.path.join(upload_dir, final_name)
+        upload.save(save_path)
+
+        return os.path.relpath(save_path, os.path.join(app.root_path, "static"))
+
+    def _populate_ticket_from_request(ticket, ticket_type: str):
+        form_data = request.form.to_dict() if request.form else {}
+        json_data = request.get_json(silent=True) or {}
+        data = {**json_data, **form_data}
+        provided_keys = set(data.keys())
+
+        entry_path = _save_uploaded_image(
+            request.files.get("entry_image"), ticket_type, "entry"
+        )
+        exit_path = _save_uploaded_image(
+            request.files.get("exit_image"), ticket_type, "exit"
+        )
+        crop_path = _save_uploaded_image(
+            request.files.get("crop_image"), ticket_type, "crop"
+        )
+
+        payload = _extract_ticket_data(data)
+
+        payload["entry_image_path"] = entry_path or (
+            payload.get("entry_image_path")
+            if "entry_image_path" in provided_keys
+            else getattr(ticket, "entry_image_path", None)
+        )
+        payload["exit_image_path"] = exit_path or (
+            payload.get("exit_image_path")
+            if "exit_image_path" in provided_keys
+            else getattr(ticket, "exit_image_path", None)
+        )
+        payload["crop_image_path"] = crop_path or (
+            payload.get("crop_image_path")
+            if "crop_image_path" in provided_keys
+            else getattr(ticket, "crop_image_path", None)
+        )
+
+        for key, value in payload.items():
+            if value is None and key not in provided_keys:
+                value = getattr(ticket, key)
+            setattr(ticket, key, value)
+
+        return ticket
 
     @app.route("/<string:ticket_type>/tickets", methods=["GET"])
     def list_tickets(ticket_type: str) -> str:
@@ -164,32 +259,26 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
             ticket_label=_ticket_label(ticket_type),
         )
 
+    @app.route("/api/<string:ticket_type>/tickets", methods=["GET", "POST"])
+    def api_list_tickets(ticket_type: str):
+        model = _get_ticket_model(ticket_type)
+
+        if request.method == "GET":
+            tickets = model.query.order_by(model.created_at.desc()).all()
+            return jsonify([ticket.as_dict() for ticket in tickets])
+
+        ticket = model()
+        _populate_ticket_from_request(ticket, ticket_type)
+        db.session.add(ticket)
+        db.session.commit()
+        return jsonify(ticket.as_dict()), 201
+
     @app.route("/<string:ticket_type>/tickets/new", methods=["GET", "POST"])
     def create_ticket(ticket_type: str) -> str:
         model = _get_ticket_model(ticket_type)
         if request.method == "POST":
-            ticket = model(
-                camera_id=_to_int(request.form.get("camera_id")),
-                zone_name=request.form.get("zone_name"),
-                camera_ip=request.form.get("camera_ip"),
-                zone_region=request.form.get("zone_region"),
-                spot_number=_to_int(request.form.get("spot_number")),
-                plate_number=request.form.get("plate_number"),
-                plate_code=request.form.get("plate_code"),
-                plate_city=request.form.get("plate_city"),
-                confidence=_to_int(request.form.get("confidence")),
-                entry_time=_parse_datetime(request.form.get("entry_time")),
-                exit_time=_parse_datetime(request.form.get("exit_time")),
-                status=request.form.get("status"),
-                parkonic_trip_id=_to_int(request.form.get("parkonic_trip_id")),
-                process_time_in=_parse_datetime(request.form.get("process_time_in")),
-                process_time_out=_parse_datetime(request.form.get("process_time_out")),
-                image_base64=request.form.get("image_base64"),
-                crop_image_path=request.form.get("crop_image_path"),
-                entry_image_path=request.form.get("entry_image_path"),
-                exit_image_path=request.form.get("exit_image_path"),
-                exit_clip_path=request.form.get("exit_clip_path"),
-            )
+            ticket = model()
+            _populate_ticket_from_request(ticket, ticket_type)
             db.session.add(ticket)
             db.session.commit()
             flash(f"{_ticket_label(ticket_type)} ticket created", "success")
@@ -207,26 +296,7 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
         model = _get_ticket_model(ticket_type)
         ticket = model.query.get_or_404(ticket_id)
         if request.method == "POST":
-            ticket.camera_id = _to_int(request.form.get("camera_id"))
-            ticket.zone_name = request.form.get("zone_name")
-            ticket.camera_ip = request.form.get("camera_ip")
-            ticket.zone_region = request.form.get("zone_region")
-            ticket.spot_number = _to_int(request.form.get("spot_number"))
-            ticket.plate_number = request.form.get("plate_number")
-            ticket.plate_code = request.form.get("plate_code")
-            ticket.plate_city = request.form.get("plate_city")
-            ticket.confidence = _to_int(request.form.get("confidence"))
-            ticket.entry_time = _parse_datetime(request.form.get("entry_time"))
-            ticket.exit_time = _parse_datetime(request.form.get("exit_time"))
-            ticket.status = request.form.get("status")
-            ticket.parkonic_trip_id = _to_int(request.form.get("parkonic_trip_id"))
-            ticket.process_time_in = _parse_datetime(request.form.get("process_time_in"))
-            ticket.process_time_out = _parse_datetime(request.form.get("process_time_out"))
-            ticket.image_base64 = request.form.get("image_base64")
-            ticket.crop_image_path = request.form.get("crop_image_path")
-            ticket.entry_image_path = request.form.get("entry_image_path")
-            ticket.exit_image_path = request.form.get("exit_image_path")
-            ticket.exit_clip_path = request.form.get("exit_clip_path")
+            _populate_ticket_from_request(ticket, ticket_type)
             db.session.commit()
             flash(f"{_ticket_label(ticket_type)} ticket updated", "success")
             return redirect(url_for("list_tickets", ticket_type=ticket_type))
@@ -247,12 +317,6 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
         flash(f"{_ticket_label(ticket_type)} ticket deleted", "info")
         return redirect(url_for("list_tickets", ticket_type=ticket_type))
 
-    @app.route("/api/<string:ticket_type>/tickets", methods=["GET"])
-    def api_list_tickets(ticket_type: str):
-        model = _get_ticket_model(ticket_type)
-        tickets = model.query.order_by(model.created_at.desc()).all()
-        return jsonify([ticket.as_dict() for ticket in tickets])
-
     @app.route("/api/<string:ticket_type>/tickets/<int:ticket_id>", methods=["GET", "PUT", "DELETE"])
     def api_ticket(ticket_type: str, ticket_id: int):
         model = _get_ticket_model(ticket_type)
@@ -264,27 +328,7 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
             db.session.commit()
             return ("", 204)
 
-        data = request.get_json(force=True)
-        ticket.camera_id = _to_int(data.get("camera_id"))
-        ticket.zone_name = data.get("zone_name")
-        ticket.camera_ip = data.get("camera_ip")
-        ticket.zone_region = data.get("zone_region")
-        ticket.spot_number = _to_int(data.get("spot_number"))
-        ticket.plate_number = data.get("plate_number")
-        ticket.plate_code = data.get("plate_code")
-        ticket.plate_city = data.get("plate_city")
-        ticket.confidence = _to_int(data.get("confidence"))
-        ticket.entry_time = _parse_datetime(data.get("entry_time"))
-        ticket.exit_time = _parse_datetime(data.get("exit_time"))
-        ticket.status = data.get("status")
-        ticket.parkonic_trip_id = _to_int(data.get("parkonic_trip_id"))
-        ticket.process_time_in = _parse_datetime(data.get("process_time_in"))
-        ticket.process_time_out = _parse_datetime(data.get("process_time_out"))
-        ticket.image_base64 = data.get("image_base64")
-        ticket.crop_image_path = data.get("crop_image_path")
-        ticket.entry_image_path = data.get("entry_image_path")
-        ticket.exit_image_path = data.get("exit_image_path")
-        ticket.exit_clip_path = data.get("exit_clip_path")
+        _populate_ticket_from_request(ticket, ticket_type)
         db.session.commit()
         return jsonify(ticket.as_dict())
 
