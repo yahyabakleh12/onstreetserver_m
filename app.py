@@ -108,7 +108,6 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
     def _ticket_label(ticket_type: str) -> str:
         return "OCR" if ticket_type.lower() == "ocr" else "OMC"
 
-    @app.before_first_request
     def create_tables() -> None:
         db.create_all()
         if not OcrTicket.query.first():
@@ -146,6 +145,9 @@ def create_app(test_config: Optional[dict] = None) -> Flask:
             db.session.add(sample_omc_ticket)
 
         db.session.commit()
+
+    with app.app_context():
+        create_tables()
 
     @app.route("/")
     def home() -> str:
