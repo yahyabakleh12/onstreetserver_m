@@ -22,6 +22,8 @@ from werkzeug.utils import secure_filename
 def _build_database_uri(app_root: str) -> str:
     env_url = os.environ.get("DATABASE_URL")
     if env_url:
+        if not env_url.startswith("mysql"):
+            raise RuntimeError("DATABASE_URL must point to a MySQL database")
         return env_url
 
     mysql_host = os.environ.get("MYSQL_HOST")
@@ -36,7 +38,10 @@ def _build_database_uri(app_root: str) -> str:
             f"mysql+pymysql://{mysql_user}{password}@{mysql_host}:{mysql_port}/{mysql_db}"
         )
 
-    return f"sqlite:///{os.path.join(app_root, 'tickets.db')}"
+    raise RuntimeError(
+        "MySQL configuration missing. Set DATABASE_URL or MYSQL_HOST, MYSQL_DATABASE, "
+        "and MYSQL_USER to connect to MySQL."
+    )
 
 
 def create_app(test_config: Optional[dict] = None) -> Flask:
